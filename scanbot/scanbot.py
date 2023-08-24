@@ -1618,6 +1618,25 @@ class scanbot():
         
         if(zhold): zController.OnOffSet(True)                                   # Turn the controller back on if we need to
         
+    def rampCurrent(self,NTCP,set_current,didt=1e-4,di=5e-12,zhold=True):  # Ramp the tip set current from present value to final value at a rate of di/dt
+        if(set_current < 1e-12): return
+        zController = ZController(NTCP)                                         # Nanonis ZController module
+        
+        sleepTime   = di/didt                                                   # Sleep interval for changing current by step size
+        current = zController.SetpntGet()                                       # Grab the present z-controlller set current from nanonis
+        
+        if(zhold): zController.OnOffSet(False)                                  # Turn off the z-controller if we need to
+        
+        num_di = int(abs(current-set_current)/di)                               # Calculate the number of steps based on the step size and range
+                                                                                # Change the current according to step size
+        for i in np.logspace(start=np.log10(current),stop=np.log10(set_current),num=num_di, base=10):              
+            if(i <= 10e-9): zController.SetpntSet(i)                            # Set the z-controller set current in nanonis.
+            time.sleep(sleepTime)                                               # sleep a bit
+        
+        zController.SetpntSet(set_current)                                      # Set the final current in case the step size doesn't get us there nicely
+        
+        if(zhold): zController.OnOffSet(True)                                   # Turn the controller back on if we need to
+
     def makePNG(self,scanData,filePath='',pngFilename='im.png',returnData=False,fit=True,dpi=150):
         fig, ax = plt.subplots(1,1)
         
