@@ -214,7 +214,7 @@ class hk_commands(object):
                     '-corrN'    : ['1',             lambda x: int(x),   "(int) Correct every (n) experimental points."],
                     '-addN'     : ['1',             lambda x: int(x),   "(int) If no drift is detected, add this number to nth drift correct frame."],
                     '-pDelay'   : ['0.5',           lambda x: float(x), "(float) Delay to settle tip position at each point before spectroscopy measurement."],
-                    '-zDrift'   : [False,           lambda x: bool(x),  "(booolean) Apply piezo drift correction in z before each point."],
+                    '-zDrift'   : [False,           lambda x: bool(x),  "(boolean) Apply piezo drift correction in z before each point."],
                     '-tipSpeed' : ['2e-9',          lambda x: float(x), "(float) Speed of tip to move between each point."],
                     '-maxDrift' : ['20',            lambda x: int(x),   "(int) Maximum drift correction applied as %% of drift frame."],
         }
@@ -228,6 +228,7 @@ class hk_commands(object):
         # Unpack the arguments
         args = self.interface.unpackArgs(user_arg_dict)                         
 
+        self.interface.sendReply(args)
         func = lambda : self.driftSTS(*args)                                    # Handle to the function to be threaded
         return self.interface.threadTask(func)                                  # Return and thread the function
 
@@ -287,6 +288,10 @@ class hk_commands(object):
         #------------ INPUT HANDLING -----------#
         #########################################
 
+        # bug check
+        self.interface.sendReply('zDrift = ' + str(zDrift))
+        self.interface.sendReply('Zdrift is type ' + str(type(zDrift)))
+
         # Convert max_drift to percentage (decimal)
         max_drift /= 100
 
@@ -337,9 +342,9 @@ class hk_commands(object):
         # Define scan save channels
         _,_, pixels, lines = scan.BufferGet()
         # Here I want to use InSlotsGet to find the channel idx of 'Z (m)', but demo spits out error. Instead we find the index of the 'Z (m)' RTidx list returned by NamesGet.
-        # signal_names = signals.NamesGet()
+        signal_names = signals.NamesGet()
         # Here is code for non-demo Nanonis. signal_names have list index = channel, and correspoding signal_indexes = RTidx.
-        signal_names, _ = signals.InSlotsGet()
+        # signal_names, _ = signals.InSlotsGet()
         Zidx = signal_names.index('Z (m)')
 
         #########################################
@@ -365,16 +370,14 @@ class hk_commands(object):
         """
         Wait end of scan
         """
-        timeout_status, file_path_size, file_path = scan.WaitEndOfScan()
+        _,_, file_path = scan.WaitEndOfScan()
         self.interface.sendReply("Wait end of scan")
         self.interface.sendReply("file_path: " + file_path)
     
         # Grab frame data
-        channel_name,im1,scan_direction = scan.FrameDataGrab(Zidx, 1)
+        _,im1,_ = scan.FrameDataGrab(Zidx, 1)
         # Send image to front panel:
-        pngFilename = 'im-c' + str(Zidx) + '.png'                        # All unsaved (incomplete) scans are saved as im.png
-        pngFilename = self.makePNG(im1,pngFilename=pngFilename)        # Generate a png from the scan data
-        self.interface.sendPNG(pngFilename,notify=False)                    # Send a png over zulip
+        self.interface.scanbot.plot(Zidx)                   
 
         # Check if user has called stop and stop the experiment.
         if(self.interface.scanbot.checkEventFlags() == True):               # Periodically check event flags when appropriate to see if the user has called "stop"
@@ -549,7 +552,7 @@ class hk_commands(object):
 
             # Send progress to front panel:
             if (self.interface.run_mode == 'p'):
-                self.interface.panel.updateProgress(point+1,num_points)
+                self.interface.panel.update_Progress(point+1,num_points)
             
             # Resume, i.e. take the next experiment point at the start of each loop.
             # ------- This has no effect on the first point.

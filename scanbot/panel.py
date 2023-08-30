@@ -47,8 +47,8 @@ class ScanbotPanel(param.Parameterized):
         
         self.selectFunction(name=options[0])
         
-        self.mainGridSpec = pn.GridSpec(sizing_mode='stretch_both',mode='override')
-        self.mainGridSpec.servable(target="main")
+        # self.mainGridSpec = pn.GridSpec(sizing_mode='stretch_both',mode='override')
+        # self.mainGridSpec.servable(target="main")
         # self.mainGridSpec[0, :3] = pn.Spacer(styles=dict(background='#FF0000'))
         
     
@@ -267,9 +267,9 @@ class ScanbotPanel(param.Parameterized):
             self.driftSTSImages.append(im.copy())
             self.mainGridSpec[0,0] = pn.pane.Matplotlib(fig)
 
-            self.driftSTSIDX += 1
-            if(self.driftSTSIDX == int(self.sidebarForm[0]['-corrN'].value)):
-                self.running = ""
+            # self.driftSTSIDX += 1
+            # if(self.driftSTSIDX == int(self.sidebarForm[0]['-corrN'].value)):
+            #     self.running = ""
 
         plt.close(fig)
         
@@ -335,8 +335,9 @@ class ScanbotPanel(param.Parameterized):
                 args.append(key + "=" + str(value.value))
         return args
 
-    def updateProgress(self,value,max):
+    def update_Progress(self, value, max):
         if (self.running == 'driftSTS'):
+            self.progress.active = False
             self.progress.max = max
             self.progress.value = value
         
@@ -361,7 +362,7 @@ class ScanbotPanel(param.Parameterized):
         form['-corrN']    = pn.widgets.TextInput(name='Drift correct every n points', value="1")
         form['-addN']     = pn.widgets.TextInput(name='If no drift, add this to drift every n', value="1")
         form['-pDelay']   = pn.widgets.TextInput(name='Pre-measure Delay (s)', value="0.5")
-        form['-zDrift']   = pn.widgets.Select(name='Correct z-drift before each point', options=[False, True])
+        form['-zDrift']   = pn.widgets.Select(name='Correct z-drift before each point', options=['No', 'Yes'])
         form['-tipSpeed'] = pn.widgets.TextInput(name='Tip speed', value="2e-9")
         form['-maxDrift'] = pn.widgets.TextInput(name="Max %% drift correction", value="20")
         
@@ -381,8 +382,8 @@ class ScanbotPanel(param.Parameterized):
         buttonStop = pn.widgets.Button(name='Stop Drift Corrected STS', button_type='primary')
         buttonStop.on_click(self.stop)
 
-        # self.progress = pn.indicators.Progress(name='Progress', active=True, width=5)
-        # self.sidebarColumn.append(self.progress)
+        self.progress = pn.indicators.Progress(name='Progress', active=True, width=300)
+        form['progress'] = self.progress
 
         form['button_start'] = buttonStart
         form['button_stop']  = buttonStop
@@ -397,6 +398,7 @@ class ScanbotPanel(param.Parameterized):
         self.prev_driftSTSForm = self.sidebarForm.copy()
         
         args = self.unpack(self.sidebarForm[0]) 
+        # print(args)
         self.interface.sendReply(self.interface.hk_commands.commands['drift_sts'](args))
         
         # <--------------------------------- Comms
@@ -406,7 +408,7 @@ class ScanbotPanel(param.Parameterized):
         self.mainGridSpec.objects = OrderedDict()
         self.mainGridSpec[0,1] = pn.Spacer(styles=dict(background='grey'))
         self.mainGridSpec[0,0] = pn.Spacer(styles=dict(background='red'))
-        
+
         self.driftSTSImages = []
         
         self.driftSTSIDX = 0
