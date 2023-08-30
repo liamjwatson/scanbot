@@ -16,6 +16,7 @@ matplotlib.use('agg')
 
 from PIL import Image
 from pathlib import Path
+import time
 
 class ScanbotPanel(param.Parameterized):
     template = 'fast'
@@ -262,13 +263,13 @@ class ScanbotPanel(param.Parameterized):
             if(self.biasDepIDX == int(self.sidebarForm[0]['-n'].value)):
                 self.running = ""
             
-        # if(self.running == "driftSTS"):
-        #     self.driftSTSImages.append(im.copy())
-        #     self.mainGridSpec[0,0] = pn.pane.Matplotlib(fig)
+        if(self.running == "driftSTS"):
+            self.driftSTSImages.append(im.copy())
+            self.mainGridSpec[0,0] = pn.pane.Matplotlib(fig)
 
-        #     self.driftSTSIDX += 1
-        #     if(self.driftSTSIDX == int(self.sidebarForm[0]['-corrN'].value)):
-        #         self.running = ""
+            self.driftSTSIDX += 1
+            if(self.driftSTSIDX == int(self.sidebarForm[0]['-corrN'].value)):
+                self.running = ""
 
         plt.close(fig)
         
@@ -345,28 +346,43 @@ class ScanbotPanel(param.Parameterized):
             form = self.prev_driftSTSForm.copy()
             return form
         
-        form = {}
         patterns = ['Line', 'Grid', 'Cloud']
+        t = time.localtime()
+        t_fmt = str(t.tm_year) + '-' + str(t.tm_mon) + '-' + str(t.tm_mday) + '__' + str(t.tm_hour) + '_' + str(t.tm_min) + '_' + str(t.tm_sec)
+        basename_str = 'Grid_' + t_fmt
+
+        form = {}
+        form['-basename'] = pn.widgets.TextInput(name='File name', value=basename_str)
         form['-pat']      = pn.widgets.Select(name='Pattern', options=patterns)
-        form['-imgV']     = pn.widgets.TextInput(name='Imaging bias', value="1")
-        form['-imgI']     = pn.widgets.TextInput(name='Imaging Current', value="20e-12")
-        form['-specV']    = pn.widgets.TextInput(name='Spectroscopy Bias', value="1")
-        form['-specI']    = pn.widgets.TextInput(name='Spectroscopy Current', value="100e-12")
+        form['-imgV']     = pn.widgets.TextInput(name='Imaging bias (V)', value="1")
+        form['-imgI']     = pn.widgets.TextInput(name='Imaging Current (I)', value="20e-12")
+        form['-specV']    = pn.widgets.TextInput(name='Spectroscopy Bias (V)', value="1")
+        form['-specI']    = pn.widgets.TextInput(name='Spectroscopy Current (I)', value="100e-12")
         form['-corrN']    = pn.widgets.TextInput(name='Drift correct every n points', value="1")
         form['-addN']     = pn.widgets.TextInput(name='If no drift, add this to drift every n', value="1")
+        form['-pDelay']   = pn.widgets.TextInput(name='Pre-measure Delay (s)', value="0.5")
         form['-zDrift']   = pn.widgets.Select(name='Correct z-drift before each point', options=[False, True])
-        form['-tipSpeed'] = pn.widgets.Select(name='Tip speed', value="2e-9")
-        form['-maxDrift'] = pn.widgets.Select(name="Max %' drift correction", value="20")
+        form['-tipSpeed'] = pn.widgets.TextInput(name='Tip speed', value="2e-9")
+        form['-maxDrift'] = pn.widgets.TextInput(name="Max %% drift correction", value="20")
         
-        
+        # def p_delay_switch(zDrift_choice):
+        #     if (zDrift_choice):
+                
+        #         disabled_options = self.functionWidget.options.copy()
+        #         disabled_options.remove("Survey")
+        #         self.functionWidget.disabled_options = disabled_options
+
+        # pn.bind(p_delay_switch, form['-zDrift'])
+
+
         buttonStart = pn.widgets.Button(name='Start Drift Corrected STS', button_type='primary')
         buttonStart.on_click(self.startDriftSTS)
         
         buttonStop = pn.widgets.Button(name='Stop Drift Corrected STS', button_type='primary')
         buttonStop.on_click(self.stop)
 
-        self.progress = pn.indicators.Progress(name='Progress', active=True, width=5)
-        self.sidebarColumn.append(self.progress)
+        # self.progress = pn.indicators.Progress(name='Progress', active=True, width=5)
+        # self.sidebarColumn.append(self.progress)
 
         form['button_start'] = buttonStart
         form['button_stop']  = buttonStop
@@ -386,6 +402,14 @@ class ScanbotPanel(param.Parameterized):
         # <--------------------------------- Comms
 
         self.progress = pn.indicators.Progress(name='Progress', active=True, width=200)
+
+        self.mainGridSpec.objects = OrderedDict()
+        self.mainGridSpec[0,1] = pn.Spacer(styles=dict(background='grey'))
+        self.mainGridSpec[0,0] = pn.Spacer(styles=dict(background='red'))
+        
+        self.driftSTSImages = []
+        
+        self.driftSTSIDX = 0
 
         self.running = "driftSTS"
 

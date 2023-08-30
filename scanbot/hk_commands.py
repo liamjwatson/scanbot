@@ -199,24 +199,31 @@ class hk_commands(object):
         #------------ INPUT HANDLING -----------#
         #########################################
 
+        # Format default uniquie experiment basename:
+        t = time.localtime()
+        t_fmt = str(t.tm_year) + '-' + str(t.tm_mon) + '-' + str(t.tm_mday) + '__' + str(t.tm_hour) + '_' + str(t.tm_min) + '_' + str(t.tm_sec)
+        basename_str = 'Grid_' + t_fmt
 
-        arg_dict = {'-pat'      : ['"Line"',        lambda x: str(x),   "(string) Experimental pattern. Must be one of: 'Line', 'Grid', or 'Cloud'."],
+
+        arg_dict = {'-basename' : [basename_str,    lambda x: str(x),   "(string) Experimental filename/basename."],
+                    '-pat'      : ['"Line"',        lambda x: str(x),   "(string) Experimental pattern. Must be one of: 'Line', 'Grid', or 'Cloud'."],
                     '-imgV'     : ['1',             lambda x: float(x), "(float) Bias for acquiring images."],
                     '-imgI'     : ['20e-12',        lambda x: float(x), "(float) Set-point current for acquiring images."],
                     '-specV'    : ['1',             lambda x: float(x), "(float) Bias for spectroscopy (relative z-offset)."],
                     '-specI'    : ['100e-12',       lambda x: float(x), "(float) Set-point current for spectroscopy (relative z-offset)."],
                     '-corrN'    : ['1',             lambda x: int(x),   "(int) Correct every (n) experimental points."],
                     '-addN'     : ['1',             lambda x: int(x),   "(int) If no drift is detected, add this number to nth drift correct frame."],
+                    '-pDelay'   : ['0.5',           lambda x: float(x), "(float) Delay to settle tip position at each point before spectroscopy measurement."],
                     '-zDrift'   : [False,           lambda x: bool(x),  "(booolean) Apply piezo drift correction in z before each point."],
                     '-tipSpeed' : ['2e-9',          lambda x: float(x), "(float) Speed of tip to move between each point."],
-                    '-maxDrift' : ['20',            lambda x: int(x),   "(int) Maximum drift correction applied as %' of drift frame."],
+                    '-maxDrift' : ['20',            lambda x: int(x),   "(int) Maximum drift correction applied as %% of drift frame."],
         }
 
         if(_help): return arg_dict                                              # This will get called when the user runs the command 'help exUnthreaded'
 
         error,user_arg_dict = self.interface.userArgs(arg_dict,user_args)       # This will validate args V and wait as float() and int(), respectively
         if(error):
-            return error + "\nRun ```help change_bias2``` if you're unsure."    # Inform the user of any errors in their input
+            return error + "\nRun ```help drift_sts``` if you're unsure."    # Inform the user of any errors in their input
 
         # Unpack the arguments
         args = self.interface.unpackArgs(user_arg_dict)                         
@@ -225,7 +232,7 @@ class hk_commands(object):
         return self.interface.threadTask(func)                                  # Return and thread the function
 
 
-    def driftSTS(self, pat, img_V, img_I, spec_V, spec_I, corr_nth, add_to_nth, zDrift, tip_speed, max_drift):
+    def driftSTS(self, basename, pat, img_V, img_I, spec_V, spec_I, corr_nth, add_to_nth, p_delay, zDrift, tip_speed, max_drift):
         """
         Corrects the drift during large STS grids/lines. Particularly useful at 77 K. 
         Pauses the experiment periodically to acquire images. If the sample has drifted,
@@ -328,11 +335,11 @@ class hk_commands(object):
         #########################################
 
         # Define scan save channels
-        num_channels, channel_indexes, pixels, lines = scan.BufferGet()
+        _,_, pixels, lines = scan.BufferGet()
         # Here I want to use InSlotsGet to find the channel idx of 'Z (m)', but demo spits out error. Instead we find the index of the 'Z (m)' RTidx list returned by NamesGet.
         # signal_names = signals.NamesGet()
         # Here is code for non-demo Nanonis. signal_names have list index = channel, and correspoding signal_indexes = RTidx.
-        signal_names, signal_indexes = signals.InSlotsGet()
+        signal_names, _ = signals.InSlotsGet()
         Zidx = signal_names.index('Z (m)')
 
         #########################################
@@ -364,7 +371,10 @@ class hk_commands(object):
     
         # Grab frame data
         channel_name,im1,scan_direction = scan.FrameDataGrab(Zidx, 1)
-        # Send image to front panel somehow <----------------------------------------
+        # Send image to front panel:
+        pngFilename = 'im-c' + str(Zidx) + '.png'                        # All unsaved (incomplete) scans are saved as im.png
+        pngFilename = self.makePNG(im1,pngFilename=pngFilename)        # Generate a png from the scan data
+        self.interface.sendPNG(pngFilename,notify=False)                    # Send a png over zulip
 
         # Check if user has called stop and stop the experiment.
         if(self.interface.scanbot.checkEventFlags() == True):               # Periodically check event flags when appropriate to see if the user has called "stop"
@@ -381,6 +391,9 @@ class hk_commands(object):
         pattern.ExpOpen()
 
         # Grab pattern info: #
+        _, exp, ext_VI_path, _, save_scan_channels = pattern.PropsGet()
+        # Set basename and pre-measure delay: #
+        pattern.PropsSet(exp_name=exp, basename=basename, premeasure_delay=p_delay, ext_VI_path=ext_VI_path, save_scan_channels=save_scan_channels)
 
         # For lines:
         if pat == 'Line':
@@ -498,7 +511,7 @@ class hk_commands(object):
             # Set up time axis for gradient calculation
             t = np.arange(0,5,0.25)
             # Grab current compensation:
-            status, vx, vy, vz, xsat, ysat, zsat = piezo.DriftCompGet()
+            _, vx, vy, vz, _,_,_ = piezo.DriftCompGet()
             
             # Iterate drift compensation n times:
             for n in range(2):
@@ -601,7 +614,7 @@ class hk_commands(object):
                 """
                 FrameDataGrab
                 """
-                channel_name,im2,scan_direction = scan.FrameDataGrab(Zidx, 1)
+                _,im2,_ = scan.FrameDataGrab(Zidx, 1)
 
                 #########################################
                 #------------ ESTIMATE DRIFT -----------#
